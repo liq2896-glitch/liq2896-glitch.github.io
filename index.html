@@ -1,24 +1,725 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <title>我的个人主页</title>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>飞翔的小猪 - 丛林木桩挑战</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: linear-gradient(145deg, #1a6d2f 0%, #0e4a1f 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'Quicksand', system-ui, -apple-system, 'Poppins', sans-serif;
+            touch-action: manipulation;
+        }
+
+        .game-container {
+            background: #2b5e2b;
+            border-radius: 48px;
+            padding: 20px 24px 24px 24px;
+            box-shadow: 0 25px 35px rgba(0,0,0,0.4), inset 0 1px 4px rgba(255,255,255,0.2);
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 28px;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.5);
+            cursor: pointer;
+            background: #87CEEB;
+        }
+
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-top: 18px;
+            margin-bottom: 6px;
+            padding: 0 12px;
+        }
+
+        .score-box {
+            background: #2c1e12;
+            padding: 8px 20px;
+            border-radius: 60px;
+            color: #f9e7b3;
+            font-weight: bold;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2);
+            backdrop-filter: blur(2px);
+            font-family: monospace;
+        }
+
+        .score-box span {
+            font-size: 1rem;
+            margin-right: 8px;
+            color: #ffd966;
+        }
+
+        .restart-btn {
+            background: #f4a261;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: bold;
+            padding: 6px 20px;
+            border-radius: 40px;
+            color: #2c1e12;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: inherit;
+            box-shadow: 0 4px 0 #9c5a2c;
+            transform: translateY(-2px);
+        }
+
+        .restart-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #9c5a2c;
+        }
+
+        .message {
+            text-align: center;
+            margin-top: 12px;
+            font-weight: bold;
+            color: #fff3cf;
+            text-shadow: 2px 2px 0 #4a2a12;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+        }
+
+        @media (max-width: 550px) {
+            .game-container {
+                padding: 12px 16px 16px 16px;
+            }
+            .score-box {
+                padding: 4px 16px;
+                font-size: 1.4rem;
+            }
+            .restart-btn {
+                padding: 4px 16px;
+                font-size: 1rem;
+            }
+            .message {
+                font-size: 0.75rem;
+            }
+        }
+    </style>
 </head>
 <body>
+<div>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="500" height="700"></canvas>
+        <div class="info-panel">
+            <div class="score-box"><span>🪵 穿越木桩</span> <span id="scoreValue">0</span></div>
+            <button class="restart-btn" id="restartButton">🐷 重来一次</button>
+        </div>
+        <div class="message">✨ 按【空格键】开始 / 向上飞翔 ✨ 避开木桩柱子，穿越间隙 ✨</div>
+    </div>
+</div>
 
-    <h1>欢迎来到我的个人主页！</h1>
-    
-    <p>这里是我的网站首页，不会自动跳转。</p>
+<script>
+    (function(){
+        // ---------- CANVAS ----------
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-    <hr>
+        // 游戏尺寸
+        const W = 500;
+        const H = 700;
+        canvas.width = W;
+        canvas.height = H;
 
-    <h3>常用链接：</h3>
-    <ul>
-        <li><a href="https://github.com" target="_blank">🔗 打开 GitHub 官网</a></li>
-        <li><a href="https://github.com/liq2896-github" target="_blank">🔗 打开我的 GitHub</a></li>
-    </ul>
-
-    <p>点击上面的链接会在新标签页打开，不会离开本站。</p>
-
+        // ---------- 游戏状态 ----------
+        let gameState = 'START';   // 'START', 'PLAYING', 'GAMEOVER'
+        let score = 0;
+        
+        // 小猪物理属性
+        const GRAVITY = 0.22;
+        const JUMP_FORCE = -5.2;
+        let pigY = H/2;
+        let pigVelocity = 0;
+        
+        // 小猪尺寸
+        const PIG_RADIUS = 18;
+        
+        // ---------- 木桩障碍物设定 (替代藤蔓，更清晰的柱子) ----------
+        const PILLAR_WIDTH = 52;        // 木桩宽度
+        const GAP_HEIGHT = 140;         // 上下柱子之间的空隙
+        const PILLAR_SPACING = 260;      // 障碍物之间的水平间距
+        let pillars = [];                // 存储木桩对象
+        
+        // 滚动速度
+        let currentSpeed = 2.8;
+        const BASE_SPEED = 2.8;
+        
+        // 飘浮粒子 (丛林氛围)
+        let particles = [];
+        
+        // 帧动画ID
+        let animationId = null;
+        
+        // ---------- 辅助函数 ----------
+        function updateSpeedByScore() {
+            // 每得20分增加一点速度，最大速度5.2
+            let extra = Math.min(2.4, Math.floor(score / 18) * 0.12);
+            currentSpeed = BASE_SPEED + extra;
+        }
+        
+        // 随机空隙Y坐标 (确保上下都有安全空间)
+        function randomGapY() {
+            const minGapY = 85;
+            const maxGapY = H - GAP_HEIGHT - 85;
+            if(maxGapY <= minGapY) return H/2 - GAP_HEIGHT/2;
+            return Math.floor(Math.random() * (maxGapY - minGapY + 1) + minGapY);
+        }
+        
+        // 重置/初始化木桩
+        function initPillars() {
+            pillars = [];
+            // 生成3个初始木桩，分布在右侧
+            for(let i = 0; i < 3; i++) {
+                let pillarX = W + i * PILLAR_SPACING + 50;
+                pillars.push({
+                    x: pillarX,
+                    gapY: randomGapY(),
+                    passed: false
+                });
+            }
+        }
+        
+        // 添加新木桩
+        function addNewPillar() {
+            let lastPillar = pillars[pillars.length-1];
+            let newX = lastPillar.x + PILLAR_SPACING;
+            pillars.push({
+                x: newX,
+                gapY: randomGapY(),
+                passed: false
+            });
+        }
+        
+        // 更新木桩位置、碰撞、分数 (仅在PLAYING状态)
+        function updatePillars() {
+            if(gameState !== 'PLAYING') return;
+            
+            // 移动木桩
+            for(let i=0; i<pillars.length; i++) {
+                pillars[i].x -= currentSpeed;
+            }
+            // 移除超出左边界的
+            while(pillars.length > 0 && pillars[0].x + PILLAR_WIDTH < 0) {
+                pillars.shift();
+            }
+            // 补充木桩
+            if(pillars.length === 0) {
+                addNewPillar();
+            } else {
+                let last = pillars[pillars.length-1];
+                if(last.x + PILLAR_WIDTH < W + PILLAR_SPACING - 80) {
+                    addNewPillar();
+                }
+            }
+            
+            // 碰撞检测 + 计分
+            const pigCenterX = W/2;
+            const pigLeft = pigCenterX - PIG_RADIUS;
+            const pigRight = pigCenterX + PIG_RADIUS;
+            const pigTop = pigY - PIG_RADIUS;
+            const pigBottom = pigY + PIG_RADIUS;
+            
+            for(let pillar of pillars) {
+                const pillarLeft = pillar.x;
+                const pillarRight = pillar.x + PILLAR_WIDTH;
+                const topPillarBottom = pillar.gapY;
+                const bottomPillarTop = pillar.gapY + GAP_HEIGHT;
+                
+                // 碰撞检测：X轴重叠并且Y轴碰撞
+                if(pigRight > pillarLeft && pigLeft < pillarRight) {
+                    // 碰到上木桩
+                    if(pigTop < topPillarBottom) {
+                        gameState = 'GAMEOVER';
+                        return;
+                    }
+                    // 碰到下木桩
+                    if(pigBottom > bottomPillarTop) {
+                        gameState = 'GAMEOVER';
+                        return;
+                    }
+                }
+                
+                // 计分：小猪越过木桩（木桩右侧边缘在小猪中心左侧）
+                if(!pillar.passed && pillarRight < pigCenterX) {
+                    pillar.passed = true;
+                    score++;
+                    document.getElementById('scoreValue').innerText = score;
+                    updateSpeedByScore();
+                }
+            }
+        }
+        
+        // 更新小猪物理
+        function updatePig() {
+            if(gameState !== 'PLAYING') return;
+            
+            pigVelocity += GRAVITY;
+            pigY += pigVelocity;
+            
+            // 边界死亡：撞天花板或地板
+            if(pigY - PIG_RADIUS <= 0) {
+                gameState = 'GAMEOVER';
+                pigY = PIG_RADIUS;
+                return;
+            }
+            if(pigY + PIG_RADIUS >= H) {
+                gameState = 'GAMEOVER';
+                pigY = H - PIG_RADIUS;
+                return;
+            }
+        }
+        
+        // 跳跃动作
+        function performJump() {
+            if(gameState === 'PLAYING') {
+                pigVelocity = JUMP_FORCE;
+            } else if(gameState === 'START') {
+                startGame();
+            } else if(gameState === 'GAMEOVER') {
+                fullReset();
+            }
+        }
+        
+        // 开始新对局
+        function startGame() {
+            gameState = 'PLAYING';
+            score = 0;
+            document.getElementById('scoreValue').innerText = "0";
+            pigY = H/2;
+            pigVelocity = 0;
+            currentSpeed = BASE_SPEED;
+            initPillars();       // 重新生成木桩
+            updateSpeedByScore();
+        }
+        
+        // 完全重置游戏 (回到START界面)
+        function fullReset() {
+            gameState = 'START';
+            score = 0;
+            document.getElementById('scoreValue').innerText = "0";
+            pigY = H/2;
+            pigVelocity = 0;
+            currentSpeed = BASE_SPEED;
+            initPillars();       // 预先生成木桩，但不在PLAYING状态不会移动
+        }
+        
+        // ---------- 粒子系统 (增加森林梦幻感) ----------
+        function initParticles() {
+            particles = [];
+            for(let i=0;i<40;i++) {
+                particles.push({
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    size: Math.random() * 2.5 + 0.8,
+                    speedX: Math.random() * 0.35 + 0.1,
+                    floatOffset: Math.random() * Math.PI * 2,
+                    alpha: Math.random() * 0.5 + 0.3
+                });
+            }
+        }
+        
+        function updateParticles() {
+            for(let p of particles) {
+                p.x -= p.speedX;
+                if(p.x < 0) p.x = W;
+                p.y += Math.sin(Date.now() * 0.002 + p.floatOffset) * 0.15;
+                if(p.y > H) p.y = 0;
+                if(p.y < 0) p.y = H;
+            }
+        }
+        
+        function drawParticles() {
+            for(let p of particles) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fillStyle = `rgba(235, 245, 170, ${p.alpha})`;
+                ctx.fill();
+                ctx.shadowBlur = 2;
+                ctx.shadowColor = "#f9f0a0";
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+        }
+        
+        // ---------- 华丽绘制背景 (森林+天空) ----------
+        function drawBackground() {
+            const grad = ctx.createLinearGradient(0, 0, 0, H);
+            grad.addColorStop(0, "#c9e9ff");
+            grad.addColorStop(0.55, "#a3dd9b");
+            grad.addColorStop(1, "#6fad4a");
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+            
+            // 云朵
+            ctx.fillStyle = "rgba(255,255,240,0.85)";
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.ellipse(70, 80, 48, 38, 0, 0, Math.PI*2);
+            ctx.ellipse(125, 68, 54, 42, 0, 0, Math.PI*2);
+            ctx.ellipse(175, 85, 44, 36, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(400, 130, 58, 42, 0, 0, Math.PI*2);
+            ctx.ellipse(455, 118, 48, 38, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 远山
+            ctx.fillStyle = "#568b3c";
+            ctx.beginPath();
+            ctx.moveTo(0, H-120);
+            ctx.bezierCurveTo(80, H-170, 160, H-140, 250, H-115);
+            ctx.lineTo(500, H-130);
+            ctx.lineTo(500, H-80);
+            ctx.lineTo(0, H-80);
+            ctx.fill();
+            ctx.fillStyle = "#457a2c";
+            ctx.beginPath();
+            ctx.moveTo(300, H-140);
+            ctx.bezierCurveTo(370, H-190, 450, H-160, 500, H-130);
+            ctx.lineTo(500, H-80);
+            ctx.lineTo(300, H-80);
+            ctx.fill();
+            
+            // 草地
+            ctx.fillStyle = "#5a9242";
+            ctx.fillRect(0, H-45, W, 48);
+            ctx.fillStyle = "#7cb518";
+            for(let i=0;i<25;i++) {
+                ctx.beginPath();
+                ctx.moveTo(i*35, H-45);
+                ctx.lineTo(i*35+12, H-68);
+                ctx.lineTo(i*35-12, H-68);
+                ctx.fill();
+            }
+            // 小花
+            for(let f=0;f<18;f++) {
+                let fx = (f*37 + 13) % W;
+                ctx.fillStyle = ["#f9d56e","#ffb347","#f4a261","#e9c46a"][f%4];
+                ctx.beginPath();
+                ctx.arc(fx, H-52, 3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "#f2e8b3";
+                ctx.beginPath();
+                ctx.arc(fx-1, H-54, 1, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+        
+        // 绘制木桩柱子 (带纹理，像木头)
+        function drawPillar(x, y, width, height, isTop) {
+            ctx.save();
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = "rgba(0,0,0,0.4)";
+            
+            // 木桩主体 (棕色木头质感)
+            const grad = ctx.createLinearGradient(x, y, x+width, y+height);
+            grad.addColorStop(0, "#8B5A2B");
+            grad.addColorStop(0.5, "#A0522D");
+            grad.addColorStop(1, "#6B3E1A");
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, y, width, height);
+            
+            // 木纹纹理 (横纹)
+            ctx.fillStyle = "#5D3A1A";
+            for(let i=0; i<12; i++) {
+                let lineY = y + i * (height/12);
+                ctx.fillRect(x+4, lineY, width-8, 2);
+            }
+            // 垂直木纹细线
+            ctx.strokeStyle = "#4A2A0E";
+            ctx.lineWidth = 1.5;
+            for(let v=0; v<3; v++) {
+                ctx.beginPath();
+                ctx.moveTo(x+12 + v*14, y);
+                ctx.lineTo(x+12 + v*14, y+height);
+                ctx.stroke();
+            }
+            
+            // 藤蔓缠绕效果 (让木桩更丛林风)
+            ctx.beginPath();
+            ctx.strokeStyle = "#3c8c40";
+            ctx.lineWidth = 4;
+            for(let vine=0; vine<3; vine++) {
+                let offset = vine * (height/4);
+                ctx.beginPath();
+                ctx.moveTo(x-2, y+offset);
+                ctx.quadraticCurveTo(x+width/2, y+offset+12, x+width+2, y+offset);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x-2, y+offset+20);
+                ctx.quadraticCurveTo(x+width/2, y+offset+32, x+width+2, y+offset+20);
+                ctx.stroke();
+            }
+            // 小叶子装饰
+            ctx.fillStyle = "#6aa84f";
+            for(let leaf=0; leaf<4; leaf++) {
+                let leafY = y + leaf * (height/4) + 12;
+                ctx.beginPath();
+                ctx.moveTo(x+width/2, leafY);
+                ctx.lineTo(x+width/2+8, leafY-6);
+                ctx.lineTo(x+width/2+8, leafY+6);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x+width/2, leafY);
+                ctx.lineTo(x+width/2-8, leafY-6);
+                ctx.lineTo(x+width/2-8, leafY+6);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+        
+        function drawPillarsPair() {
+            for(let pillar of pillars) {
+                const pillarX = pillar.x;
+                const gapY = pillar.gapY;
+                // 上木桩 (从顶部到gapY)
+                if(gapY > 0) {
+                    drawPillar(pillarX, 0, PILLAR_WIDTH, gapY, true);
+                }
+                // 下木桩 (从 gapY+GAP_HEIGHT 到底部)
+                const bottomStart = gapY + GAP_HEIGHT;
+                if(bottomStart < H) {
+                    drawPillar(pillarX, bottomStart, PILLAR_WIDTH, H - bottomStart, false);
+                }
+                // 空隙边缘发光提示 (萤火虫)
+                ctx.fillStyle = "#ffe6a3";
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = "#ffcc55";
+                for(let i=0;i<2;i++) {
+                    ctx.beginPath();
+                    ctx.arc(pillarX+PILLAR_WIDTH/2, gapY+8, 4, 0, Math.PI*2);
+                    ctx.fillStyle = "#ffdd88";
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(pillarX+PILLAR_WIDTH/2, bottomStart-8, 4, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.shadowBlur = 0;
+            }
+        }
+        
+        // 可爱小猪 (飞翔动态)
+        function drawPig(x, y, radius) {
+            ctx.save();
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = "rgba(0,0,0,0.25)";
+            const grad = ctx.createRadialGradient(x-5, y-5, 5, x, y, radius);
+            grad.addColorStop(0, "#ffb7c5");
+            grad.addColorStop(1, "#ff8da1");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.fillStyle = "#ffd0c0";
+            ctx.beginPath();
+            ctx.ellipse(x-2, y+4, radius*0.52, radius*0.56, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 耳朵
+            ctx.fillStyle = "#f08eac";
+            ctx.beginPath();
+            ctx.moveTo(x-13, y-16);
+            ctx.quadraticCurveTo(x-21, y-30, x-9, y-26);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x+13, y-16);
+            ctx.quadraticCurveTo(x+21, y-30, x+9, y-26);
+            ctx.fill();
+            ctx.fillStyle = "#ffb7c0";
+            ctx.beginPath();
+            ctx.moveTo(x-11, y-20);
+            ctx.quadraticCurveTo(x-16, y-27, x-9, y-24);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x+11, y-20);
+            ctx.quadraticCurveTo(x+16, y-27, x+9, y-24);
+            ctx.fill();
+            
+            // 眼睛
+            ctx.fillStyle = "#2c2c2c";
+            ctx.beginPath();
+            ctx.arc(x-7, y-5, 3.2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x+7, y-5, 3.2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = "white";
+            ctx.beginPath();
+            ctx.arc(x-8.5, y-7, 1.3, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x+5.5, y-7, 1.3, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 鼻子
+            ctx.fillStyle = "#d96c7a";
+            ctx.beginPath();
+            ctx.ellipse(x, y+2, 6.5, 5.2, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = "#7a3b3f";
+            ctx.beginPath();
+            ctx.arc(x-2.8, y+1.2, 1.4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x+2.8, y+1.2, 1.4, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 腮红
+            ctx.fillStyle = "#ff99aa";
+            ctx.globalAlpha = 0.55;
+            ctx.beginPath();
+            ctx.ellipse(x-12, y+4, 4.2, 3.5, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(x+12, y+4, 4.2, 3.5, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            
+            // 翅膀扇动
+            let wingPhase = Date.now() * 0.012;
+            let wingAngle = Math.sin(wingPhase) * 0.65;
+            ctx.fillStyle = "#eedd99";
+            ctx.beginPath();
+            ctx.moveTo(x-16, y-3);
+            ctx.quadraticCurveTo(x-27 + wingAngle*3, y-12 + wingAngle, x-18, y+2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x+16, y-3);
+            ctx.quadraticCurveTo(x+27 - wingAngle*3, y-12 + wingAngle, x+18, y+2);
+            ctx.fill();
+            ctx.fillStyle = "#f7e05e";
+            ctx.beginPath();
+            ctx.moveTo(x-15, y-2);
+            ctx.quadraticCurveTo(x-23 + wingAngle*2, y-8 + wingAngle*0.8, x-16, y+1);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x+15, y-2);
+            ctx.quadraticCurveTo(x+23 - wingAngle*2, y-8 + wingAngle*0.8, x+16, y+1);
+            ctx.fill();
+            ctx.restore();
+        }
+        
+        // 界面绘制
+        function drawStartScreen() {
+            ctx.fillStyle = "rgba(30, 40, 20, 0.68)";
+            ctx.fillRect(0, 0, W, H);
+            ctx.font = "bold 42px 'Segoe UI', 'Quicksand'";
+            ctx.fillStyle = "#fff8e7";
+            ctx.textAlign = "center";
+            ctx.fillText("🐷 飞翔的小猪 🐷", W/2, H/2 - 80);
+            ctx.font = "26px system-ui";
+            ctx.fillStyle = "#ffefb9";
+            ctx.fillText("按【空格键】穿越木桩", W/2, H/2);
+            ctx.font = "19px monospace";
+            ctx.fillStyle = "#d9f0b3";
+            ctx.fillText("避开木桩柱子，穿过间隙得分", W/2, H/2 + 70);
+            ctx.fillText("点击画面或空格 → 向上振翅", W/2, H/2 + 115);
+            ctx.textAlign = "left";
+        }
+        
+        function drawGameOverScreen() {
+            ctx.fillStyle = "rgba(0,0,0,0.72)";
+            ctx.fillRect(0, 0, W, H);
+            ctx.font = "bold 40px 'Segoe UI'";
+            ctx.fillStyle = "#ffe6b3";
+            ctx.textAlign = "center";
+            ctx.fillText("💔 撞到木桩 💔", W/2, H/2 - 70);
+            ctx.font = "32px monospace";
+            ctx.fillStyle = "#ffdd88";
+            ctx.fillText("穿越柱数: " + score, W/2, H/2);
+            ctx.font = "20px system-ui";
+            ctx.fillStyle = "#bef26e";
+            ctx.fillText("按「重来一次」或 空格键 重新开始", W/2, H/2 + 80);
+            ctx.textAlign = "left";
+        }
+        
+        function drawPlayingUI() {
+            ctx.font = "bold 14px 'Segoe UI'";
+            ctx.fillStyle = "#2d3e1f";
+            ctx.fillText("🪵 避开木桩!", 12, 42);
+            ctx.fillStyle = "#fbf5cf";
+            ctx.fillText("🪵 避开木桩!", 10, 40);
+        }
+        
+        function draw() {
+            drawBackground();
+            drawPillarsPair();    // 绘制木桩柱子
+            drawParticles();
+            drawPig(W/2, pigY, PIG_RADIUS);
+            
+            if(gameState === 'START') {
+                drawStartScreen();
+            } else if(gameState === 'GAMEOVER') {
+                drawGameOverScreen();
+            } else if(gameState === 'PLAYING') {
+                drawPlayingUI();
+            }
+        }
+        
+        // ---------- 主循环 ----------
+        function gameLoop() {
+            if(gameState === 'PLAYING') {
+                updatePig();
+                updatePillars();   // 碰撞检测会改变状态
+                updateParticles();
+            } else {
+                updateParticles();
+            }
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+        
+        // ---------- 事件绑定 ----------
+        function handleJumpEvent(e) {
+            if(e.type === 'keydown') {
+                if(e.code === 'Space' || e.code === 'ArrowUp') {
+                    e.preventDefault();
+                    performJump();
+                }
+                return;
+            }
+            e.preventDefault();
+            performJump();
+        }
+        
+        function attachEvents() {
+            window.addEventListener('keydown', handleJumpEvent);
+            canvas.addEventListener('click', handleJumpEvent);
+            canvas.addEventListener('touchstart', handleJumpEvent, { passive: false });
+        }
+        
+        document.getElementById('restartButton').addEventListener('click', () => {
+            fullReset();
+        });
+        
+        function init() {
+            initParticles();
+            fullReset();
+            attachEvents();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+        
+        init();
+    })();
+</script>
 </body>
 </html>
