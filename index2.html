@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>澳门全景地图 - 50+美丽景点（优化版）</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+            background: #1a472a;
+            padding: 15px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #fef9f0;
+            border-radius: 28px;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #1b5e20, #ffb74d);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .header h1 { font-size: 24px; margin-bottom: 5px; }
+        .stats-badge {
+            background: rgba(0,0,0,0.2);
+            display: inline-block;
+            padding: 4px 15px;
+            border-radius: 30px;
+            margin-top: 8px;
+            font-size: 12px;
+        }
+        .map-wrapper { height: 450px; }
+        #map { height: 100%; width: 100%; }
+        .info-section {
+            background: #fef9f0;
+            padding: 15px 20px;
+        }
+        .filter-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 15px 0;
+        }
+        .filter-btn {
+            padding: 5px 12px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 11px;
+            background: #e8dfd0;
+        }
+        .filter-btn.active {
+            background: #ffb74d;
+            color: white;
+        }
+        .spots-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 12px;
+            max-height: 450px;
+            overflow-y: auto;
+        }
+        .spot-card {
+            background: white;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            padding: 10px;
+            gap: 10px;
+            border: 1px solid #eee;
+            transition: all 0.2s;
+        }
+        .spot-card:hover {
+            transform: translateX(5px);
+            border-color: #ffb74d;
+            background: #fffdf5;
+        }
+        .spot-emoji { font-size: 32px; min-width: 45px; text-align: center; }
+        .spot-info { flex: 1; }
+        .spot-name { font-weight: bold; color: #2d6a4f; font-size: 14px; }
+        .spot-type { font-size: 9px; background: #e8f5e9; padding: 2px 8px; border-radius: 12px; display: inline-block; margin-left: 5px; }
+        .spot-desc { font-size: 11px; color: #666; margin-top: 4px; }
+        .spot-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+        .tag { font-size: 9px; background: #fff3e0; padding: 1px 6px; border-radius: 10px; }
+        .footer {
+            background: #1b5e20;
+            color: #c8e6c9;
+            text-align: center;
+            padding: 10px;
+            font-size: 10px;
+        }
+        .legend-custom {
+            background: rgba(27,94,32,0.9);
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 10px;
+            color: white;
+        }
+        .reset-map-btn {
+            background: #2d6a4f;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        @media (max-width: 700px) {
+            .map-wrapper { height: 350px; }
+            .spots-container { max-height: 400px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🗺️ 澳门 · 50+美景图鉴地图</h1>
+        <p>历史古迹 | 自然风光 | 现代地标 | 文艺打卡 | 浪漫海滨 | 美食街区 | 教育地标</p>
+        <div class="stats-badge">📸 52个精选景点 · 点击卡片定位</div>
+    </div>
+    <div class="map-wrapper">
+        <div id="map"></div>
+    </div>
+    <div class="info-section">
+        <div class="filter-group" id="filterBar">
+            <button class="filter-btn active" data-cat="all">🌍 全部(52)</button>
+            <button class="filter-btn" data-cat="历史古迹">🏛️ 历史古迹(14)</button>
+            <button class="filter-btn" data-cat="自然风光">🌿 自然风光(10)</button>
+            <button class="filter-btn" data-cat="现代地标">🏙️ 现代地标(10)</button>
+            <button class="filter-btn" data-cat="文艺打卡">🎨 文艺打卡(8)</button>
+            <button class="filter-btn" data-cat="浪漫海滨">🌊 浪漫海滨(6)</button>
+            <button class="filter-btn" data-cat="美食街区">🍜 美食街区(4)</button>
+            <button class="filter-btn" data-cat="教育地标">📚 教育地标(1)</button>
+        </div>
+        <div class="spots-container" id="spotsList"></div>
+    </div>
+    <div class="footer">
+        📸 点击卡片或地图标记查看详情 | 澳门深度游攻略
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/js/all.min.js"></script>
+<script>
+// ==================== 52个景点完整数据 ====================
+var attractions = [
+    // 历史古迹 (14处)
+    { name: "大三巴牌坊", lat: 22.198745, lng: 113.540689, desc: "澳门标志，圣保禄教堂遗址，世界文化遗产。", category: "历史古迹", emoji: "🏛️", tags: ["世界遗产","必打卡"] },
+    { name: "议事亭前地", lat: 22.193842, lng: 113.539617, desc: "葡式波浪广场，周围历史建筑群。", category: "历史古迹", emoji: "⛲", tags: ["世界遗产","拍照"] },
+    { name: "妈阁庙", lat: 22.186965, lng: 113.534527, desc: "澳门最古老庙宇，1488年始建。", category: "历史古迹", emoji: "🏯", tags: ["祈福","百年古刹"] },
+    { name: "大炮台", lat: 22.197540, lng: 113.540100, desc: "军事防御设施，现为澳门博物馆。", category: "历史古迹", emoji: "🔫", tags: ["观景台","历史"] },
+    { name: "玫瑰圣母堂", lat: 22.194500, lng: 113.539900, desc: "明黄色巴洛克教堂，文物珍藏。", category: "历史古迹", emoji: "⛪", tags: ["教堂","ins风"] },
+    { name: "圣安多尼教堂", lat: 22.199200, lng: 113.540200, desc: "澳门三大古教堂之一，1558年建。", category: "历史古迹", emoji: "⛪", tags: ["教堂","历史"] },
+    { name: "东望洋灯塔", lat: 22.195011, lng: 113.549426, desc: "中国第一座现代灯塔，半岛最高点。", category: "历史古迹", emoji: "🗼", tags: ["观景","灯塔"] },
+    { name: "圣母雪地殿教堂", lat: 22.195200, lng: 113.549000, desc: "东望洋山小教堂，壁画中西合璧。", category: "历史古迹", emoji: "⛪", tags: ["教堂","壁画"] },
+    { name: "岗顶剧院", lat: 22.192800, lng: 113.537500, desc: "中国第一座西式剧院，薄荷绿建筑。", category: "历史古迹", emoji: "🎭", tags: ["文艺","拍照"] },
+    { name: "郑家大屋", lat: 22.190500, lng: 113.536000, desc: "郑观应故居，岭南风格大宅。", category: "历史古迹", emoji: "🏠", tags: ["中式建筑","清静"] },
+    { name: "卢家大屋", lat: 22.194300, lng: 113.539000, desc: "中西合璧青砖大宅，光影极美。", category: "历史古迹", emoji: "🏠", tags: ["光影","细节"] },
+    { name: "圣方济各教堂", lat: 22.119880, lng: 113.566628, desc: "路环黄色教堂，韩剧取景地。", category: "历史古迹", emoji: "⛪", tags: ["浪漫","路环"] },
+    { name: "莲峰庙", lat: 22.210500, lng: 113.549000, desc: "古刹，林则徐宣布禁烟之地。", category: "历史古迹", emoji: "🛕", tags: ["庙宇","历史"] },
+    { name: "普济禅院", lat: 22.200500, lng: 113.549500, desc: "澳门最大禅院，望厦条约签订地。", category: "历史古迹", emoji: "🛕", tags: ["禅院","历史"] },
+    // 自然风光 (10处)
+    { name: "黑沙海滩", lat: 22.117612, lng: 113.574308, desc: "澳门唯一黑沙滩，天然奇观。", category: "自然风光", emoji: "🏖️", tags: ["海滩","独特"] },
+    { name: "竹湾海滩", lat: 22.119200, lng: 113.576000, desc: "清静小海湾，适合发呆看海。", category: "自然风光", emoji: "🌊", tags: ["安静","游泳"] },
+    { name: "龙爪角", lat: 22.115000, lng: 113.578000, desc: "沿海步行径，奇岩怪石听海。", category: "自然风光", emoji: "🪨", tags: ["徒步","海景"] },
+    { name: "路环步行径", lat: 22.122500, lng: 113.567000, desc: "山林小径，俯瞰路环全景。", category: "自然风光", emoji: "🥾", tags: ["登山","清新"] },
+    { name: "大潭山郊野公园", lat: 22.152000, lng: 113.567000, desc: "氹仔最高点，俯瞰机场。", category: "自然风光", emoji: "🌳", tags: ["观景","野餐"] },
+    { name: "小潭山观景台", lat: 22.153500, lng: 113.556000, desc: "半岛夜景最佳观赏点。", category: "自然风光", emoji: "🌃", tags: ["夜景","浪漫"] },
+    { name: "白鸽巢公园", lat: 22.199000, lng: 113.539000, desc: "澳门最古老公园，绿树成荫。", category: "自然风光", emoji: "🕊️", tags: ["公园","休闲"] },
+    { name: "卢廉若公园", lat: 22.197000, lng: 113.546000, desc: "苏州园林风格，小桥流水。", category: "自然风光", emoji: "🎋", tags: ["园林","拍照"] },
+    { name: "螺丝山公园", lat: 22.200000, lng: 113.555000, desc: "螺旋形小径登顶，观北区。", category: "自然风光", emoji: "🏞️", tags: ["登山","观景"] },
+    { name: "二龙喉公园", lat: 22.199500, lng: 113.547000, desc: "澳门最大公园，有缆车。", category: "自然风光", emoji: "🐉", tags: ["缆车","亲子"] },
+    // 现代地标 (10处)
+    { name: "澳门旅游塔", lat: 22.179365, lng: 113.540007, desc: "338米观景塔，可蹦极。", category: "现代地标", emoji: "🗼", tags: ["刺激","观景"] },
+    { name: "威尼斯人", lat: 22.147725, lng: 113.560043, desc: "人造运河+贡多拉船。", category: "现代地标", emoji: "🛶", tags: ["购物","拍照"] },
+    { name: "巴黎人铁塔", lat: 22.145500, lng: 113.562000, desc: "1/2比例复刻埃菲尔铁塔。", category: "现代地标", emoji: "🗼", tags: ["浪漫","灯光秀"] },
+    { name: "伦敦人", lat: 22.148200, lng: 113.558000, desc: "英伦风格，大本钟复制品。", category: "现代地标", emoji: "🇬🇧", tags: ["英伦风","打卡"] },
+    { name: "新葡京", lat: 22.190485, lng: 113.544841, desc: "莲花造型，璀璨夜景。", category: "现代地标", emoji: "🏨", tags: ["夜景","地标"] },
+    { name: "澳门科学馆", lat: 22.186500, lng: 113.551000, desc: "银色斜塔，海边心形树。", category: "现代地标", emoji: "🔭", tags: ["亲子","海边"] },
+    { name: "大赛车博物馆", lat: 22.185000, lng: 113.545000, desc: "珍藏方程式赛车。", category: "现代地标", emoji: "🏎️", tags: ["赛车","动感"] },
+    { name: "美高梅天幕广场", lat: 22.188000, lng: 113.548000, desc: "巨型水族箱，艺术装置。", category: "现代地标", emoji: "🐠", tags: ["艺术","网红"] },
+    { name: "8字摩天轮", lat: 22.146000, lng: 113.561000, desc: "全球唯一8字形摩天轮。", category: "现代地标", emoji: "🎡", tags: ["摩天轮","夜景"] },
+    { name: "永利皇宫喷泉", lat: 22.148500, lng: 113.557000, desc: "免费缆车+音乐喷泉。", category: "现代地标", emoji: "⛲", tags: ["喷泉","免费"] },
+    // 文艺打卡 (8处)
+    { name: "恋爱巷", lat: 22.197800, lng: 113.540500, desc: "大三巴旁粉色小巷，情侣必去。", category: "文艺打卡", emoji: "💕", tags: ["浪漫","情侣"] },
+    { name: "疯堂斜巷", lat: 22.196500, lng: 113.543000, desc: "葡式碎石路，文艺气息浓。", category: "文艺打卡", emoji: "🎨", tags: ["文艺","拍照"] },
+    { name: "龙环葡韵", lat: 22.152885, lng: 113.558013, desc: "薄荷绿葡式住宅群，清新。", category: "文艺打卡", emoji: "💚", tags: ["ins风","博物馆"] },
+    { name: "路环市区", lat: 22.119000, lng: 113.566000, desc: "彩色房子+安德鲁蛋挞。", category: "文艺打卡", emoji: "🏘️", tags: ["彩色","美食"] },
+    { name: "十月初五马路", lat: 22.120000, lng: 113.565000, desc: "海边马路，电影取景地。", category: "文艺打卡", emoji: "🚲", tags: ["怀旧","滤镜"] },
+    { name: "福隆新街", lat: 22.191800, lng: 113.538500, desc: "红窗门老街，烟火气。", category: "文艺打卡", emoji: "🏮", tags: ["老街","美食"] },
+    { name: "关前正街", lat: 22.195000, lng: 113.538000, desc: "文创小店+涂鸦墙。", category: "文艺打卡", emoji: "🎨", tags: ["文创","潮人"] },
+    { name: "婆仔屋", lat: 22.197000, lng: 113.542000, desc: "百年建筑，艺术空间。", category: "文艺打卡", emoji: "🏚️", tags: ["展览","咖啡"] },
+    // 浪漫海滨 (6处)
+    { name: "南湾湖", lat: 22.188000, lng: 113.541000, desc: "喷泉+灯光秀，浪漫散步。", category: "浪漫海滨", emoji: "🌅", tags: ["喷泉","夜景"] },
+    { name: "西湾湖", lat: 22.185000, lng: 113.534000, desc: "安静湖畔，婚纱照圣地。", category: "浪漫海滨", emoji: "🚣", tags: ["婚纱","静谧"] },
+    { name: "半岛海滨长廊", lat: 22.183000, lng: 113.548000, desc: "沿海步道，看夕阳。", category: "浪漫海滨", emoji: "🚶", tags: ["散步","日落"] },
+    { name: "凼仔海滨休憩区", lat: 22.155000, lng: 113.553000, desc: "绿地+海景，野餐好去。", category: "浪漫海滨", emoji: "🧺", tags: ["野餐","亲子"] },
+    { name: "海洋花园大马路", lat: 22.160000, lng: 113.560000, desc: "滨海骑车径，吹海风。", category: "浪漫海滨", emoji: "🚴", tags: ["骑行","放松"] },
+    { name: "融和门", lat: 22.180000, lng: 113.525000, desc: "海边雕塑，日出绝美。", category: "浪漫海滨", emoji: "🌄", tags: ["日出","艺术"] },
+    // 美食街区 (4处)
+    { name: "官也街", lat: 22.153372, lng: 113.558899, desc: "美食集中，猪扒包必吃。", category: "美食街区", emoji: "🍜", tags: ["地道美食","热闹"] },
+    { name: "百老汇美食街", lat: 22.150000, lng: 113.560000, desc: "街头小吃，烟火气足。", category: "美食街区", emoji: "🍡", tags: ["夜市","小吃"] },
+    { name: "三盏灯", lat: 22.200000, lng: 113.548000, desc: "本地人美食区，东南亚风。", category: "美食街区", emoji: "🍲", tags: ["本地","东南亚"] },
+    { name: "沙梨头街市", lat: 22.201000, lng: 113.542000, desc: "海鲜+小炒，本土风味。", category: "美食街区", emoji: "🦐", tags: ["海鲜","大排档"] },
+    // 教育地标 (1处)
+    { name: "青洲中学", lat: 22.2045, lng: 113.5445, desc: "1951年创办，SAT官方考点。", category: "教育地标", emoji: "📚", tags: ["教育","SAT考点"] }
+];
+
+console.log("总景点数:", attractions.length);
+
+// 初始化地图
+var map = L.map('map').setView([22.18, 113.548], 12.5);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap',
+    subdomains: 'abcd',
+    maxZoom: 18
+}).addTo(map);
+
+// 添加标记
+var markers = [];
+attractions.forEach(function(spot) {
+    var popupHtml = `
+        <div style="min-width: 200px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:28px;">${spot.emoji}</span>
+                <strong style="font-size:16px; color:#2d6a4f;">${spot.name}</strong>
+            </div>
+            <p style="font-size:12px; margin:8px 0;">📖 ${spot.desc}</p>
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                ${spot.tags.map(t => `<span style="background:#fff3e0; padding:2px 8px; border-radius:12px; font-size:10px;">#${t}</span>`).join('')}
+            </div>
+        </div>
+    `;
+    var marker = L.marker([spot.lat, spot.lng]).addTo(map).bindPopup(popupHtml);
+    markers.push({ marker: marker, data: spot });
+});
+
+// 渲染列表
+var container = document.getElementById('spotsList');
+var currentFilter = 'all';
+
+function renderList(filter) {
+    container.innerHTML = '';
+    var filtered = attractions.filter(s => filter === 'all' || s.category === filter);
+    filtered.forEach(function(spot) {
+        var card = document.createElement('div');
+        card.className = 'spot-card';
+        card.innerHTML = `
+            <div class="spot-emoji">${spot.emoji}</div>
+            <div class="spot-info">
+                <div class="spot-name">
+                    ${spot.name}
+                    <span class="spot-type">${spot.category}</span>
+                </div>
+                <div class="spot-desc">${spot.desc.substring(0, 50)}...</div>
+                <div class="spot-tags">
+                    ${spot.tags.slice(0,2).map(t => `<span class="tag">#${t}</span>`).join('')}
+                </div>
+            </div>
+        `;
+        card.onclick = function() {
+            var target = markers.find(m => m.data.name === spot.name);
+            if (target) {
+                map.setView([spot.lat, spot.lng], 15);
+                target.marker.openPopup();
+            }
+        };
+        container.appendChild(card);
+    });
+}
+
+// 筛选
+var btns = document.querySelectorAll('.filter-btn');
+btns.forEach(btn => {
+    btn.addEventListener('click', function() {
+        btns.forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        currentFilter = this.getAttribute('data-cat');
+        renderList(currentFilter);
+    });
+});
+renderList('all');
+
+// 图例
+var legend = L.control({ position: 'bottomright' });
+legend.onAdd = function() {
+    var div = L.DomUtil.create('div', 'legend-custom');
+    div.innerHTML = '📌 52个景点 | 点击查看详情';
+    return div;
+};
+legend.addTo(map);
+
+// 比例尺
+L.control.scale({ metric: true, imperial: false }).addTo(map);
+
+// 重置按钮
+var resetBtn = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd: function() {
+        var btn = L.DomUtil.create('button', 'reset-map-btn');
+        btn.innerHTML = '🏠 重置';
+        btn.onclick = () => { map.setView([22.18, 113.548], 12.5); };
+        return btn;
+    }
+});
+map.addControl(new resetBtn());
+
+console.log("地图加载完成，共52个景点");
+</script>
+</body>
+</html>
